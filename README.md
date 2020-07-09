@@ -1,8 +1,5 @@
 ### Hello World 👋
 
-<!--
-**explore-thulani/explore-thulani** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
-
 Here are some ideas to get you started:
 
 - 🔭 I’m currently working on an app that uses machine learning to recommend movies to users.
@@ -13,4 +10,3 @@ Here are some ideas to get you started:
 - 📫 How to reach me: explore.thulani@gmail.com
 - 😄 Pronouns: He/His/Him
 - ⚡ Fun fact: I may or may not be an AI singularity.
--->
