@@ -1,8 +1,7 @@
 ### Hello World 👋
 
-Here are some ideas to get you started:
+Here are some ideas to get you acquinted:
 
-- 🔭 I’m currently working on an app that uses machine learning to recommend movies to users.
 - 🌱 I’m currently learning Unsupervised Learning (Machine Learning)
 - 👯 I’m looking to collaborate on any problem solving projects
 - 🤔 I’m looking for help with cool AI ideas.
