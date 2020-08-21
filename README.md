@@ -2,8 +2,8 @@
 
 Here are some ideas to get you acquinted:
 
-- 🌱 I’m currently learning Unsupervised Learning (Machine Learning)
-- 👯 I’m looking to collaborate on any problem solving projects
+- 🌱 Currently learning Computer Vision (Deep Learning)
+- 👯 Looking to collaborate on any problem solving projects
 - 💬 Ask me about anything math & tech related.
 - 📫 How to reach me: explore.thulani@gmail.com
 - 😄 Pronouns: He/His/Him
