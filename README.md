@@ -1,10 +1,44 @@
-### Hello World 👋
+# DebtWise Project
 
-Here are some ideas to get you acquinted:
+This repository contains the DebtWise personal finance application backend.
 
-- 🌱 Currently learning Computer Vision (Deep Learning) & ROS (Robot Programming)
-- 👯 Looking to collaborate on any problem solving projects
-- 💬 Ask me about anything math & tech related.
-- 📫 How to reach me: explore.thulani@gmail.com
-- 😄 Pronouns: He/His/Him
-- ⚡ Fun fact: May or may not be an AI singularity.
+## 📁 Project Structure
+
+- `/debtwise-api` - Backend API built with FastAPI
+
+## 🚀 Getting Started
+
+Navigate to the `debtwise-api` directory for detailed setup instructions:
+
+```bash
+cd debtwise-api
+cat README.md
+```
+
+## ✨ Features Implemented
+
+- ✅ FastAPI backend with async support
+- ✅ JWT authentication system
+- ✅ User management (registration, login, profile)
+- ✅ PostgreSQL database with SQLAlchemy ORM
+- ✅ Redis for caching and analytics
+- ✅ Analytics tracking system
+- ✅ Rate limiting middleware
+- ✅ Comprehensive test suite
+- ✅ Docker support
+- ✅ CI/CD pipeline with GitHub Actions
+- ✅ Structured logging with request tracking
+
+## 🛠️ Tech Stack
+
+- **Backend**: Python 3.11+, FastAPI
+- **Database**: PostgreSQL, Redis
+- **Authentication**: JWT (JSON Web Tokens)
+- **Testing**: PyTest
+- **Package Management**: uv
+- **Containerization**: Docker
+- **CI/CD**: GitHub Actions
+
+## 📄 License
+
+[Add your license here]
