@@ -1,0 +1,223 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: debtwise-beta-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-debtwise}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-debtwise_beta}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backup:/backup
+    networks:
+      - debtwise-beta
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-debtwise}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: debtwise-beta-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - debtwise-beta
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY}:beta-${GITHUB_SHA:-latest}
+    container_name: debtwise-beta-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-debtwise}:${DB_PASSWORD}@db:5432/${DB_NAME:-debtwise_beta}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ENVIRONMENT=beta
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["https://beta.debtwise.com"]}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - RATE_LIMIT_ENABLED=true
+      - ANALYTICS_ENABLED=true
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - debtwise-beta
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.debtwise-beta-api.rule=Host(`beta-api.debtwise.com`)"
+      - "traefik.http.routers.debtwise-beta-api.entrypoints=websecure"
+      - "traefik.http.routers.debtwise-beta-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.debtwise-beta-api.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.debtwise-beta-api-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.debtwise-beta-api-ratelimit.ratelimit.burst=200"
+      - "traefik.http.routers.debtwise-beta-api.middlewares=debtwise-beta-api-ratelimit"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: debtwise-beta-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - debtwise-beta
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: debtwise-beta-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - debtwise-beta
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.debtwise-beta-grafana.rule=Host(`beta-monitoring.debtwise.com`)"
+      - "traefik.http.routers.debtwise-beta-grafana.entrypoints=websecure"
+      - "traefik.http.routers.debtwise-beta-grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.debtwise-beta-grafana.loadbalancer.server.port=3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # Log aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: debtwise-beta-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - debtwise-beta
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: debtwise-beta-promtail
+    restart: unless-stopped
+    volumes:
+      - ./logs:/var/log/debtwise:ro
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - debtwise-beta
+
+  # Backup service
+  postgres-backup:
+    image: postgres:16-alpine
+    container_name: debtwise-beta-backup
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PGHOST=db
+      - PGUSER=${DB_USER:-debtwise}
+      - PGPASSWORD=${DB_PASSWORD}
+      - PGDATABASE=${DB_NAME:-debtwise_beta}
+    volumes:
+      - ./backup:/backup
+      - ./scripts/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do /backup.sh; sleep 86400; done"]  # Daily backups
+    networks:
+      - debtwise-beta
+
+networks:
+  debtwise-beta:
+    driver: bridge
+  traefik-public:
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:

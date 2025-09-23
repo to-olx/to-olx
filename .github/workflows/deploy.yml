@@ -1,0 +1,198 @@
+name: Deploy to Beta/Production
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./debtwise-api
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Generate image output
+        id: image
+        run: echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy-beta:
+    name: Deploy to Beta Environment
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main' && 
+      !contains(github.event.head_commit.message, '[skip-deploy]')
+    environment:
+      name: beta
+      url: https://beta-api.debtwise.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to Beta
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+        run: |
+          echo "Deploying $IMAGE to beta environment"
+          # Add your deployment script here
+          # Example: kubectl set image deployment/api api=$IMAGE -n beta
+          # Or: ssh deploy@beta-server "docker pull $IMAGE && docker-compose up -d"
+      
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against beta environment"
+          # Add smoke test commands here
+          # curl -f https://beta-api.debtwise.com/api/v1/health || exit 1
+      
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Beta deployment ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://api.debtwise.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create deployment
+        uses: chrnorm/deployment-action@v2
+        id: deployment
+        with:
+          token: ${{ github.token }}
+          environment: production
+          ref: ${{ github.ref }}
+      
+      - name: Deploy to Production
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+        run: |
+          echo "Deploying $IMAGE to production environment"
+          # Add your production deployment script here
+          # This should include:
+          # - Blue/green deployment or rolling update
+          # - Database migration checks
+          # - Health checks
+          # - Rollback capability
+      
+      - name: Run production smoke tests
+        run: |
+          echo "Running smoke tests against production environment"
+          # Add production smoke test commands here
+      
+      - name: Update deployment status (success)
+        if: success()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          environment-url: https://api.debtwise.com
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          state: success
+      
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ github.token }}
+          environment-url: https://api.debtwise.com
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+          state: failure
+      
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Production deployment ${{ job.status }} for version ${{ github.ref }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: deploy-production
+    environment:
+      name: production
+    steps:
+      - name: Rollback to previous version
+        run: |
+          echo "Rolling back production deployment"
+          # Add rollback commands here
+          # This should restore the previous version
+      
+      - name: Notify team of rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: ':warning: Production deployment rolled back for ${{ github.ref }}',
+              color: 'danger'
+            }
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
