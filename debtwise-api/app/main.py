@@ -16,9 +16,12 @@ from app.core.middleware import (
     LoggingMiddleware,
     RateLimitMiddleware,
     AnalyticsMiddleware,
+    AuthenticationMiddleware,
 )
 from app.services import analytics_service
 from app.core.db_init import init_db
+from app.core.database import close_database
+from app.core.redis import init_redis, close_redis
 
 
 @asynccontextmanager
@@ -28,17 +31,22 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     setup_logging()
+    
+    # Initialize Redis connection (used by analytics and rate limiting)
+    await init_redis()
+    
+    # Initialize analytics service
     await analytics_service.initialize()
+    
     # Initialize database tables
     await init_db()
-    # TODO: Initialize Redis connection
     
     yield
     
     # Shutdown
     await analytics_service.shutdown()
-    # TODO: Close database connections
-    # TODO: Close Redis connections
+    await close_database()
+    await close_redis()
 
 
 def create_application() -> FastAPI:
@@ -77,6 +85,7 @@ def create_application() -> FastAPI:
     # Add custom middleware
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(AuthenticationMiddleware)  # Extract user ID before rate limiting
     app.add_middleware(AnalyticsMiddleware)
     
     if settings.rate_limit_enabled:

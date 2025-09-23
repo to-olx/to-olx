@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import is_database_healthy
+from app.core.redis import is_redis_healthy
 
 router = APIRouter()
 
@@ -39,10 +41,15 @@ async def readiness_check() -> Dict[str, str]:
     Returns:
         Dict[str, str]: Readiness status.
     """
-    # TODO: Add actual database and Redis checks when implemented
+    # Check database health
+    db_healthy = await is_database_healthy()
+    
+    # Check Redis health
+    redis_healthy = await is_redis_healthy()
+    
     checks = {
-        "database": "healthy",  # Placeholder
-        "redis": "healthy",     # Placeholder
+        "database": "healthy" if db_healthy else "unhealthy",
+        "redis": "healthy" if redis_healthy else "unhealthy",
     }
     
     all_healthy = all(status == "healthy" for status in checks.values())

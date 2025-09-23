@@ -6,7 +6,6 @@ import time
 import uuid
 from typing import Callable, Dict, Optional
 
-import redis
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -14,6 +13,9 @@ from starlette.responses import JSONResponse
 from app.core.config import settings
 from app.core.logging import get_logger, log_request, LogContext
 from app.services import analytics_service, EventType
+from app.core.security import decode_token
+from app.core.redis import get_redis_client
+from jose import JWTError
 
 logger = get_logger(__name__)
 
@@ -81,7 +83,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     def __init__(self, app):
         super().__init__(app)
-        self.redis_client: Optional[redis.Redis] = None
         self.rate_limit = settings.rate_limit_per_minute
         
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -120,7 +121,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     def _get_client_id(self, request: Request) -> str:
         """Get client identifier from request."""
-        # TODO: Use user ID if authenticated
+        # Use user ID if authenticated (set by AuthenticationMiddleware)
         if hasattr(request.state, "user_id"):
             return f"user:{request.state.user_id}"
         
@@ -132,21 +133,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def _check_rate_limit(self, client_id: str) -> bool:
         """Check if client has exceeded rate limit."""
-        if not self.redis_client:
-            try:
-                self.redis_client = redis.from_url(settings.redis_url, decode_responses=True)
-            except Exception as e:
-                logger.error("Failed to connect to Redis", error=str(e))
-                # Allow request if Redis is not available
-                return True
+        redis_client = await get_redis_client()
+        if not redis_client:
+            # Allow request if Redis is not available
+            return True
         
         try:
             key = f"rate_limit:{client_id}"
-            current = self.redis_client.incr(key)
+            current = await redis_client.incr(key)
             
             if current == 1:
                 # Set expiry for 1 minute
-                self.redis_client.expire(key, 60)
+                await redis_client.expire(key, 60)
             
             return current <= self.rate_limit
             
@@ -157,12 +155,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def _get_remaining_requests(self, client_id: str) -> int:
         """Get remaining requests for client."""
-        if not self.redis_client:
+        redis_client = await get_redis_client()
+        if not redis_client:
             return self.rate_limit
         
         try:
             key = f"rate_limit:{client_id}"
-            current = self.redis_client.get(key)
+            current = await redis_client.get(key)
             
             if current is None:
                 return self.rate_limit
@@ -244,3 +243,37 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
             )
             
             raise
+
+
+class AuthenticationMiddleware(BaseHTTPMiddleware):
+    """Middleware to extract user ID from JWT token and add to request state."""
+    
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Extract user ID from JWT token if present."""
+        # Skip authentication for health check endpoints
+        if request.url.path.startswith("/api/v1/health"):
+            return await call_next(request)
+        
+        # Extract token from Authorization header
+        authorization = request.headers.get("Authorization")
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization[7:]  # Remove "Bearer " prefix
+            
+            try:
+                # Decode token to get user ID
+                payload = decode_token(token)
+                user_id = payload.get("sub")
+                token_type = payload.get("type")
+                
+                if user_id and token_type == "access":
+                    # Set user_id in request state for use by other middleware
+                    request.state.user_id = int(user_id)
+                    logger.debug(f"Authenticated user {user_id}")
+            except JWTError:
+                # Invalid token - continue without authentication
+                logger.debug("Invalid JWT token")
+            except Exception as e:
+                # Other errors - log and continue
+                logger.error(f"Error decoding JWT: {e}")
+        
+        return await call_next(request)
