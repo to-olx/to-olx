@@ -7,6 +7,13 @@ A modern, scalable backend API for DebtWise - a personal finance application tha
 - **FastAPI Framework**: High-performance, async Python web framework
 - **JWT Authentication**: Secure user authentication with access and refresh tokens
 - **User Management**: Registration, login, profile management
+- **Spending Tracking**: 
+  - Transaction management with income/expense tracking
+  - Hierarchical category system with budget tracking
+  - Auto-categorization rules with pattern matching
+  - CSV import for bulk transaction upload
+  - Spending analytics and trends
+- **Debt Management**: Track and manage various types of debt
 - **Analytics System**: Track user interactions and API usage
 - **Rate Limiting**: Protect API from abuse
 - **Structured Logging**: JSON-formatted logs with request tracking
@@ -111,6 +118,11 @@ Once the application is running, you can access:
 - **Interactive API docs**: http://localhost:8000/api/docs
 - **Alternative API docs**: http://localhost:8000/api/redoc
 - **OpenAPI schema**: http://localhost:8000/api/openapi.json
+
+### Feature Documentation
+
+- **[Spending Feature](docs/SPENDING_FEATURE.md)**: Complete guide to transaction tracking, categories, rules, and CSV import
+- **[Debt Management](docs/DEBT_MANAGEMENT.md)**: Guide to debt tracking and management features
 
 ## 🧪 Testing
 
