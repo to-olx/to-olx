@@ -884,9 +884,9 @@ class InsightsService:
         # Compile dashboard data
         return {
             "current_month_spending": current_month_spending,
-            "predicted_month_end": spending_forecast.predicted_amount,
-            "spending_trend": spending_forecast.trend_direction or "stable",
-            "trend_percentage": spending_forecast.trend_percentage or 0.0,
+            "predicted_month_end": spending_forecast.predicted_amount if spending_forecast else Decimal("0"),
+            "spending_trend": spending_forecast.trend_direction if spending_forecast else "stable",
+            "trend_percentage": spending_forecast.trend_percentage if spending_forecast else 0.0,
             "budgets_at_risk": budgets_at_risk,
             "total_budget_utilization": 0.0,  # TODO: Calculate overall utilization
             "projected_overages": projected_overages,
@@ -908,14 +908,14 @@ class InsightsService:
                     reverse=True
                 )[:3]
             ],
-            "current_balance": cashflow_7d.current_balance,
-            "predicted_7_day_balance": cashflow_7d.predicted_balance,
-            "predicted_30_day_balance": cashflow_30d.predicted_balance,
+            "current_balance": cashflow_7d.current_balance if cashflow_7d else Decimal("0"),
+            "predicted_7_day_balance": cashflow_7d.predicted_balance if cashflow_7d else Decimal("0"),
+            "predicted_30_day_balance": cashflow_30d.predicted_balance if cashflow_30d else Decimal("0"),
             "low_balance_warning": {
                 "date": cashflow_30d.low_balance_date.isoformat() if cashflow_30d.low_balance_date else None,
                 "minimum_balance": str(cashflow_30d.minimum_balance),
                 "risk": cashflow_30d.overdraft_risk,
-            } if cashflow_30d.overdraft_risk > 0.3 else None,
+            } if cashflow_30d and cashflow_30d.overdraft_risk > 0.3 else None,
         }
 
 

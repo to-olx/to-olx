@@ -197,7 +197,7 @@ async def get_monitoring_dashboard(
         total_errors = sum(
             stats["count"]
             for key, stats in performance_stats.items()
-            if "5" in key.split(":")[2]  # 5xx status codes
+            if len(key.split(":")) >= 3 and "5" in key.split(":")[2]  # 5xx status codes
         )
         error_rate = (total_errors / total_requests) * 100
     

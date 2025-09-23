@@ -254,6 +254,10 @@ class PerformanceMonitor:
             
             durations = [m["duration_ms"] for m in measurements]
             
+            # Skip if no durations found
+            if not durations:
+                continue
+            
             # Calculate statistics
             stats[key] = {
                 "count": len(durations),

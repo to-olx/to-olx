@@ -256,6 +256,10 @@ class DebtService:
             total_interest += interest_charge
             months += 1
         
+        # If we hit the safety limit, the debt won't be paid off
+        if months >= 1000:
+            return -1, Decimal("-1")
+        
         return months, total_interest.quantize(Decimal("0.01"))
     
     async def generate_payoff_plan(
