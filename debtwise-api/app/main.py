@@ -14,14 +14,23 @@ from app.api.v1.router import api_router
 from app.core.middleware import (
     RequestIDMiddleware,
     LoggingMiddleware,
-    RateLimitMiddleware,
     AnalyticsMiddleware,
     AuthenticationMiddleware,
+)
+from app.core.security_middleware import (
+    SecurityHeadersMiddleware,
+    EnhancedRateLimitMiddleware,
+    InputValidationMiddleware,
+    CSRFMiddleware,
+    SessionValidationMiddleware,
+    AnomalyDetectionMiddleware,
 )
 from app.services import analytics_service
 from app.core.db_init import init_db
 from app.core.database import close_database
 from app.core.redis import init_redis, close_redis
+from app.core.openapi import custom_openapi
+from app.core.monitoring import setup_monitoring, shutdown_monitoring
 
 
 @asynccontextmanager
@@ -41,9 +50,13 @@ async def lifespan(app: FastAPI):
     # Initialize database tables
     await init_db()
     
+    # Initialize monitoring
+    await setup_monitoring(app)
+    
     yield
     
     # Shutdown
+    await shutdown_monitoring()
     await analytics_service.shutdown()
     await close_database()
     await close_redis()
@@ -82,17 +95,29 @@ def create_application() -> FastAPI:
             allowed_hosts=["*.debtwise.com", "debtwise.com"]
         )
     
-    # Add custom middleware
-    app.add_middleware(RequestIDMiddleware)
-    app.add_middleware(LoggingMiddleware)
-    app.add_middleware(AuthenticationMiddleware)  # Extract user ID before rate limiting
-    app.add_middleware(AnalyticsMiddleware)
+    # Add custom middleware (order matters - executed in reverse order)
+    # Security middleware
+    app.add_middleware(SecurityHeadersMiddleware)  # Add security headers to all responses
+    app.add_middleware(AnomalyDetectionMiddleware)  # Detect anomalous behavior patterns
+    app.add_middleware(SessionValidationMiddleware)  # Validate user sessions
+    app.add_middleware(CSRFMiddleware)  # CSRF protection for state-changing requests
+    app.add_middleware(InputValidationMiddleware)  # Validate and sanitize input
     
+    # Rate limiting
     if settings.rate_limit_enabled:
-        app.add_middleware(RateLimitMiddleware)
+        app.add_middleware(EnhancedRateLimitMiddleware)  # Enhanced rate limiting with tiers
+    
+    # Analytics and logging
+    app.add_middleware(AnalyticsMiddleware)  # Track API usage analytics
+    app.add_middleware(AuthenticationMiddleware)  # Extract user ID from JWT
+    app.add_middleware(LoggingMiddleware)  # Log all requests
+    app.add_middleware(RequestIDMiddleware)  # Add unique request ID
     
     # Include API routes
     app.include_router(api_router, prefix="/api/v1")
+    
+    # Set custom OpenAPI schema
+    app.openapi = lambda: custom_openapi(app)
     
     return app
 

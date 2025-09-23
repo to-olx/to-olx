@@ -1,0 +1,375 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        working-directory: ./debtwise-api
+        run: uv sync --frozen
+      
+      - name: Run ruff linting
+        working-directory: ./debtwise-api
+        run: uv run ruff check . --output-format=github
+      
+      - name: Run ruff formatting check
+        working-directory: ./debtwise-api
+        run: uv run ruff format . --check
+      
+      - name: Run mypy type checking
+        working-directory: ./debtwise-api
+        run: uv run mypy app tests
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: debtwise
+          POSTGRES_PASSWORD: debtwise
+          POSTGRES_DB: debtwise_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        working-directory: ./debtwise-api
+        run: uv sync --frozen
+      
+      - name: Run tests with coverage
+        working-directory: ./debtwise-api
+        env:
+          DATABASE_URL: postgresql+asyncpg://debtwise:debtwise@localhost:5432/debtwise_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          JWT_SECRET_KEY: test-jwt-secret
+          ENVIRONMENT: test
+        run: |
+          uv run pytest \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -v
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./debtwise-api/coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
+      
+      - name: Upload coverage HTML report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ./debtwise-api/htmlcov/
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        working-directory: ./debtwise-api
+        run: uv sync --frozen
+      
+      - name: Run bandit security scan
+        working-directory: ./debtwise-api
+        run: |
+          uv pip install bandit[toml]
+          uv run bandit -r app -f json -o security-report.json || true
+      
+      - name: Run safety check
+        working-directory: ./debtwise-api
+        run: |
+          uv pip install safety
+          uv run safety check --json || true
+      
+      - name: Run pip-audit
+        working-directory: ./debtwise-api
+        run: |
+          uv pip install pip-audit
+          uv run pip-audit --desc || true
+      
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: ./debtwise-api/security-report.json
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: './debtwise-api'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        working-directory: ./debtwise-api
+        run: |
+          docker build \
+            --target production \
+            --tag debtwise-api:${{ github.sha }} \
+            --tag debtwise-api:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from debtwise-api:latest \
+            .
+      
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'debtwise-api:latest'
+          format: 'sarif'
+          output: 'container-trivy-results.sarif'
+      
+      - name: Upload container scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'container-trivy-results.sarif'
+
+  api-test:
+    name: API Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: debtwise
+          POSTGRES_PASSWORD: debtwise
+          POSTGRES_DB: debtwise_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        working-directory: ./debtwise-api
+        run: |
+          uv sync --frozen
+          uv pip install httpx pytest-asyncio
+      
+      - name: Start API server
+        working-directory: ./debtwise-api
+        env:
+          DATABASE_URL: postgresql+asyncpg://debtwise:debtwise@localhost:5432/debtwise_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          JWT_SECRET_KEY: test-jwt-secret
+          ENVIRONMENT: test
+        run: |
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          echo $! > api.pid
+          sleep 5  # Wait for server to start
+      
+      - name: Run API tests
+        working-directory: ./debtwise-api
+        run: |
+          # Test health endpoint
+          curl -f http://localhost:8000/api/v1/health || exit 1
+          
+          # Additional API tests can be added here
+      
+      - name: Stop API server
+        if: always()
+        working-directory: ./debtwise-api
+        run: |
+          if [ -f api.pid ]; then
+            kill $(cat api.pid) || true
+            rm api.pid
+          fi
+
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [api-test]
+    if: github.event_name == 'pull_request'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: debtwise
+          POSTGRES_PASSWORD: debtwise
+          POSTGRES_DB: debtwise_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Install dependencies
+        working-directory: ./debtwise-api
+        run: |
+          uv sync --frozen
+          uv pip install locust
+      
+      - name: Start API server
+        working-directory: ./debtwise-api
+        env:
+          DATABASE_URL: postgresql+asyncpg://debtwise:debtwise@localhost:5432/debtwise_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          JWT_SECRET_KEY: test-jwt-secret
+          ENVIRONMENT: test
+        run: |
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          echo $! > api.pid
+          sleep 5
+      
+      - name: Run performance tests
+        working-directory: ./debtwise-api
+        run: |
+          # Simple performance test with curl
+          echo "Running basic performance test..."
+          for i in {1..100}; do
+            curl -s -o /dev/null -w "%{http_code},%{time_total}\n" http://localhost:8000/api/v1/health
+          done | tee performance-results.csv
+          
+          # Calculate average response time
+          awk -F, '{sum+=$2; count++} END {print "Average response time:", sum/count, "seconds"}' performance-results.csv
+      
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: ./debtwise-api/performance-results.csv
+      
+      - name: Stop API server
+        if: always()
+        working-directory: ./debtwise-api
+        run: |
+          if [ -f api.pid ]; then
+            kill $(cat api.pid) || true
+            rm api.pid
+          fi
