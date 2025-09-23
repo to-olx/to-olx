@@ -13,6 +13,7 @@ from app.models.base import Base
 # Import all models to ensure they are registered
 from app.models.user import User
 from app.models.debt import Debt, DebtPayment
+from app.models.transaction import Transaction, Category, TransactionRule
 
 logger = logging.getLogger(__name__)
 

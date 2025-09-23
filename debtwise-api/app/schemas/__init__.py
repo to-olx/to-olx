@@ -15,6 +15,22 @@ from app.schemas.debt import (
     PayoffPlanResponse,
     PayoffStrategy,
 )
+from app.schemas.transaction import (
+    CategoryCreate,
+    CategoryResponse,
+    CategoryUpdate,
+    CSVImportRequest,
+    CSVImportResponse,
+    SpendingByCategoryResponse,
+    SpendingTrendResponse,
+    TransactionCreate,
+    TransactionFilter,
+    TransactionResponse,
+    TransactionRuleCreate,
+    TransactionRuleResponse,
+    TransactionRuleUpdate,
+    TransactionUpdate,
+)
 from app.schemas.user import User, UserCreate, UserInDB, UserUpdate
 
 __all__ = [
@@ -39,4 +55,19 @@ __all__ = [
     "DebtPayoffProjection",
     "InterestCalculatorRequest",
     "InterestCalculatorResponse",
+    # Transaction schemas
+    "CategoryCreate",
+    "CategoryResponse",
+    "CategoryUpdate",
+    "TransactionCreate",
+    "TransactionResponse",
+    "TransactionUpdate",
+    "TransactionFilter",
+    "TransactionRuleCreate",
+    "TransactionRuleResponse",
+    "TransactionRuleUpdate",
+    "CSVImportRequest",
+    "CSVImportResponse",
+    "SpendingByCategoryResponse",
+    "SpendingTrendResponse",
 ]
