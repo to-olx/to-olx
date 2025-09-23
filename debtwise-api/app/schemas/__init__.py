@@ -28,6 +28,17 @@ from app.schemas.debt import (
     PayoffPlanResponse,
     PayoffStrategy,
 )
+from app.schemas.insight import (
+    CashflowForecastResponse,
+    DashboardInsightsResponse,
+    GenerateForecastRequest,
+    InsightFilterParams,
+    PredictiveInsightCreate,
+    PredictiveInsightResponse,
+    PredictiveInsightUpdate,
+    SpendingAnomalyResponse,
+    SpendingForecastResponse,
+)
 from app.schemas.transaction import (
     CategoryCreate,
     CategoryResponse,
@@ -95,4 +106,14 @@ __all__ = [
     "CSVImportResponse",
     "SpendingByCategoryResponse",
     "SpendingTrendResponse",
+    # Insight schemas
+    "SpendingForecastResponse",
+    "CashflowForecastResponse",
+    "PredictiveInsightCreate",
+    "PredictiveInsightUpdate",
+    "PredictiveInsightResponse",
+    "SpendingAnomalyResponse",
+    "DashboardInsightsResponse",
+    "GenerateForecastRequest",
+    "InsightFilterParams",
 ]
