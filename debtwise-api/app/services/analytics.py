@@ -164,21 +164,21 @@ class AnalyticsService:
                 score = event.timestamp.timestamp()
                 value = event.model_dump_json()
                 
-                await pipeline.zadd(key, {value: score})
+                pipeline.zadd(key, {value: score})
                 
                 # Set expiry (30 days)
-                await pipeline.expire(key, 30 * 24 * 60 * 60)
+                pipeline.expire(key, 30 * 24 * 60 * 60)
                 
                 # Update counters
                 counter_key = f"analytics:counters:{event.event_type}:{event.timestamp.strftime('%Y-%m-%d')}"
-                await pipeline.hincrby(counter_key, "count", 1)
-                await pipeline.expire(counter_key, 30 * 24 * 60 * 60)
+                pipeline.hincrby(counter_key, "count", 1)
+                pipeline.expire(counter_key, 30 * 24 * 60 * 60)
                 
                 # User-specific events
                 if event.user_id:
                     user_key = f"analytics:user:{event.user_id}:{event.timestamp.strftime('%Y-%m')}"
-                    await pipeline.zadd(user_key, {value: score})
-                    await pipeline.expire(user_key, 90 * 24 * 60 * 60)  # 90 days
+                    pipeline.zadd(user_key, {value: score})
+                    pipeline.expire(user_key, 90 * 24 * 60 * 60)  # 90 days
             
             await pipeline.execute()
             
