@@ -1,6 +1,7 @@
 """Database models package"""
 
 from app.models.base import Base, BaseModel
+from app.models.budget import Budget, BudgetAlert, BudgetPeriod, BudgetPeriodType
 from app.models.debt import Debt, DebtPayment, DebtStatus, DebtType
 from app.models.transaction import Category, Transaction, TransactionRule, TransactionType
 from app.models.user import User
@@ -17,4 +18,8 @@ __all__ = [
     "Transaction",
     "TransactionRule",
     "TransactionType",
+    "Budget",
+    "BudgetPeriod",
+    "BudgetAlert",
+    "BudgetPeriodType",
 ]

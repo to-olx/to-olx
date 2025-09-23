@@ -14,6 +14,7 @@ from app.models.base import Base
 from app.models.user import User
 from app.models.debt import Debt, DebtPayment
 from app.models.transaction import Transaction, Category, TransactionRule
+from app.models.budget import Budget, BudgetPeriod, BudgetAlert
 
 logger = logging.getLogger(__name__)
 
