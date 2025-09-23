@@ -5,7 +5,7 @@ User database model.
 from typing import Optional
 
 from sqlalchemy import Boolean, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 
@@ -30,6 +30,18 @@ class User(BaseModel):
     
     # Additional fields
     phone_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    
+    # Relationships
+    debts = relationship(
+        "Debt",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    debt_payments = relationship(
+        "DebtPayment",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     
     def __repr__(self) -> str:
         """String representation of the user."""

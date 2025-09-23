@@ -18,6 +18,7 @@ from app.core.middleware import (
     AnalyticsMiddleware,
 )
 from app.services import analytics_service
+from app.core.db_init import init_db
 
 
 @asynccontextmanager
@@ -28,7 +29,8 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     await analytics_service.initialize()
-    # TODO: Initialize database connection pool
+    # Initialize database tables
+    await init_db()
     # TODO: Initialize Redis connection
     
     yield
