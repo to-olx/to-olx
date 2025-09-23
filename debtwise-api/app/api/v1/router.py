@@ -4,7 +4,7 @@ Main API router for v1 endpoints.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, health, users, analytics, debts, transactions
+from app.api.v1.endpoints import auth, health, users, analytics, budgets, debts, transactions
 
 api_router = APIRouter()
 
@@ -15,3 +15,4 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(debts.router, prefix="/debts", tags=["debts"])
 api_router.include_router(transactions.router, prefix="/spending", tags=["spending"])
+api_router.include_router(budgets.router, prefix="/budgets", tags=["budgets"])

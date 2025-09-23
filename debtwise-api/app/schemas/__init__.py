@@ -1,6 +1,19 @@
 """Pydantic schemas package"""
 
 from app.schemas.auth import Token, TokenData
+from app.schemas.budget import (
+    BudgetAlertCreate,
+    BudgetAlertResponse,
+    BudgetAlertUpdate,
+    BudgetCreate,
+    BudgetOverviewResponse,
+    BudgetPeriodResponse,
+    BudgetResponse,
+    BudgetRolloverRequest,
+    BudgetRolloverResponse,
+    BudgetSummaryResponse,
+    BudgetUpdate,
+)
 from app.schemas.debt import (
     DebtCreate,
     DebtPaymentCreate,
@@ -42,6 +55,18 @@ __all__ = [
     "UserCreate",
     "UserInDB",
     "UserUpdate",
+    # Budget schemas
+    "BudgetCreate",
+    "BudgetUpdate",
+    "BudgetResponse",
+    "BudgetAlertCreate",
+    "BudgetAlertUpdate",
+    "BudgetAlertResponse",
+    "BudgetPeriodResponse",
+    "BudgetSummaryResponse",
+    "BudgetOverviewResponse",
+    "BudgetRolloverRequest",
+    "BudgetRolloverResponse",
     # Debt schemas
     "DebtCreate",
     "DebtUpdate",
