@@ -183,7 +183,7 @@ jobs:
     if: always()
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v5
       
       - name: Generate security summary
         run: |
