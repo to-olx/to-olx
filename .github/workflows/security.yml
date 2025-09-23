@@ -211,7 +211,7 @@ jobs:
           needs.secret-scan.result == 'failure' ||
           needs.container-scan.result == 'failure' ||
           needs.infrastructure-scan.result == 'failure'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const issue = await github.rest.issues.create({
