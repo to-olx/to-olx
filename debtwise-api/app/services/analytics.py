@@ -9,11 +9,11 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-import redis.asyncio as redis
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.redis import get_redis_client
 
 logger = get_logger(__name__)
 
@@ -72,7 +72,6 @@ class AnalyticsService:
     """Service for handling analytics events."""
     
     def __init__(self):
-        self._redis_client: Optional[redis.Redis] = None
         self._event_queue: List[AnalyticsEvent] = []
         self._flush_task: Optional[asyncio.Task] = None
         self._is_initialized = False
@@ -82,24 +81,12 @@ class AnalyticsService:
         if self._is_initialized:
             return
         
-        try:
-            self._redis_client = redis.from_url(
-                settings.redis_url,
-                decode_responses=True
-            )
-            await self._redis_client.ping()
-            
-            # Start background flush task
-            if settings.analytics_enabled:
-                self._flush_task = asyncio.create_task(self._periodic_flush())
-            
-            self._is_initialized = True
-            logger.info("Analytics service initialized")
-            
-        except Exception as e:
-            logger.error("Failed to initialize analytics service", error=str(e))
-            # Continue without analytics if Redis is not available
-            self._is_initialized = True
+        # Start background flush task
+        if settings.analytics_enabled:
+            self._flush_task = asyncio.create_task(self._periodic_flush())
+        
+        self._is_initialized = True
+        logger.info("Analytics service initialized")
     
     async def shutdown(self) -> None:
         """Shutdown the analytics service."""
@@ -112,9 +99,6 @@ class AnalyticsService:
         
         # Flush remaining events
         await self._flush_events()
-        
-        if self._redis_client:
-            await self._redis_client.close()
         
         logger.info("Analytics service shutdown")
     
@@ -159,7 +143,12 @@ class AnalyticsService:
     
     async def _flush_events(self) -> None:
         """Flush events to Redis."""
-        if not self._event_queue or not self._redis_client:
+        if not self._event_queue:
+            return
+        
+        redis_client = await get_redis_client()
+        if not redis_client:
+            # Keep events in queue if Redis is not available
             return
         
         events_to_flush = self._event_queue.copy()
@@ -167,7 +156,7 @@ class AnalyticsService:
         
         try:
             # Store events in Redis sorted set
-            pipeline = self._redis_client.pipeline()
+            pipeline = redis_client.pipeline()
             
             for event in events_to_flush:
                 # Store in sorted set with timestamp as score
@@ -226,7 +215,8 @@ class AnalyticsService:
         Returns:
             int: Event count
         """
-        if not self._redis_client:
+        redis_client = await get_redis_client()
+        if not redis_client:
             return 0
         
         if date is None:
@@ -235,7 +225,7 @@ class AnalyticsService:
         key = f"analytics:counters:{event_type}:{date.strftime('%Y-%m-%d')}"
         
         try:
-            count = await self._redis_client.hget(key, "count")
+            count = await redis_client.hget(key, "count")
             return int(count) if count else 0
         except Exception as e:
             logger.error(f"Failed to get event count: {e}")
@@ -258,7 +248,8 @@ class AnalyticsService:
         Returns:
             List[AnalyticsEvent]: User events
         """
-        if not self._redis_client:
+        redis_client = await get_redis_client()
+        if not redis_client:
             return []
         
         # Get current month's events
@@ -267,7 +258,7 @@ class AnalyticsService:
         
         try:
             # Get events in reverse chronological order
-            events_json = await self._redis_client.zrevrange(
+            events_json = await redis_client.zrevrange(
                 key,
                 offset,
                 offset + limit - 1,
