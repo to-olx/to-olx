@@ -48,6 +48,25 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+async def get_db_read_only() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Dependency to get read-only database session.
+    Does not commit changes automatically.
+    
+    Yields:
+        AsyncSession: Database session
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # No commit for read-only operations
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
 async def close_database() -> None:
     """
     Close database connections.
